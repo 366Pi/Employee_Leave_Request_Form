@@ -13,11 +13,11 @@
   },
   "externals": {
     "jquery": {
-      "path": "node_modules/jquery/dist/jquery.min.js",
-      "globalName": "jQuery"
+      "path": "https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js",
+      "globalName": "jquery"
     },
     "bootstrap": {
-      "path": "node_modules/bootstrap/dist/js/bootstrap.bundle.min.js",
+      "path": "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js",
       "globalName": "bootstrap",
       "globalDependencies": ["jquery"]
     }
