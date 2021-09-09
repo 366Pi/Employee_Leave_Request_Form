@@ -1,13 +1,28 @@
 import * as React from "react";
+import { useState } from "react";
 import {
   TextField,
   DatePicker,
   defaultDatePickerStrings,
 } from "@fluentui/react";
-const CompOff = () => {
+
+const CompOff = (props) => {
   {
     /* If Comm. Off then enable fields */
   }
+
+  const handleOccasionChange = (event) => {
+    let val = event.target.value;
+
+    console.log("child component obj: ", val);
+    props.onSelectCommOff1(val);
+  };
+
+  const handleOccasionDate = (date: Date | null | undefined): void => {
+    console.log("child component obj: ", date);
+    props.onSelectCommOff2(date);
+  };
+
   return (
     <div className="row top-buffer">
       {/* <h4 className="text-decoration-underline">
@@ -21,17 +36,9 @@ const CompOff = () => {
             ariaLabel="Select"
             // DatePicker uses English strings by default. For localized apps, you must override this prop.
             strings={defaultDatePickerStrings}
-
             // value={this.state.startDate}
+            onSelectDate={handleOccasionDate}
           />
-          {/* <TextField
-                                multiline={true}
-                                disabled
-                                rows={5}
-                                defaultValue={this.state.Selected_Activity}
-                                // eslint-disable-next-line react/jsx-no-bind
-                                // onChange={onChange}
-                              /> */}
         </div>
       </div>
 
@@ -39,10 +46,9 @@ const CompOff = () => {
         <div className="form-group">
           <TextField
             label="Occasion"
-
             // defaultValue={this.state.Selected_Activity}
             // eslint-disable-next-line react/jsx-no-bind
-            // onChange={onChange}
+            onChange={handleOccasionChange}
           />
         </div>
       </div>

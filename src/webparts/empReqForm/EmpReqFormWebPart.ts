@@ -1,29 +1,28 @@
-import * as React from 'react';
-import * as ReactDom from 'react-dom';
-import { Version } from '@microsoft/sp-core-library';
+import * as React from "react";
+import * as ReactDom from "react-dom";
+import { Version } from "@microsoft/sp-core-library";
 import {
   IPropertyPaneConfiguration,
-  PropertyPaneTextField
-} from '@microsoft/sp-property-pane';
-import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
+  PropertyPaneTextField,
+} from "@microsoft/sp-property-pane";
+import { BaseClientSideWebPart } from "@microsoft/sp-webpart-base";
 
-import * as strings from 'EmpReqFormWebPartStrings';
-import EmpReqForm from './components/EmpReqForm';
-import { IEmpReqFormProps } from './components/IEmpReqFormProps';
+import * as strings from "EmpReqFormWebPartStrings";
+import EmpReqForm from "./components/EmpReqForm";
+import { IEmpReqFormProps } from "./components/IEmpReqFormProps";
 
 export interface IEmpReqFormWebPartProps {
   description: string;
 }
 
 export default class EmpReqFormWebPart extends BaseClientSideWebPart<IEmpReqFormWebPartProps> {
-
   public render(): void {
     const element: React.ReactElement<IEmpReqFormProps> = React.createElement(
       EmpReqForm,
       {
-          description: this.properties.description,
-
-
+        description: this.properties.description,
+        context: this.context,
+        webUrl: this.context.pageContext.web.absoluteUrl,
       }
     );
 
@@ -35,7 +34,7 @@ export default class EmpReqFormWebPart extends BaseClientSideWebPart<IEmpReqForm
   }
 
   protected get dataVersion(): Version {
-    return Version.parse('1.0');
+    return Version.parse("1.0");
   }
 
   protected getPropertyPaneConfiguration(): IPropertyPaneConfiguration {
@@ -43,20 +42,20 @@ export default class EmpReqFormWebPart extends BaseClientSideWebPart<IEmpReqForm
       pages: [
         {
           header: {
-            description: strings.PropertyPaneDescription
+            description: strings.PropertyPaneDescription,
           },
           groups: [
             {
               groupName: strings.BasicGroupName,
               groupFields: [
-                PropertyPaneTextField('description', {
-                  label: strings.DescriptionFieldLabel
-                })
-              ]
-            }
-          ]
-        }
-      ]
+                PropertyPaneTextField("description", {
+                  label: strings.DescriptionFieldLabel,
+                }),
+              ],
+            },
+          ],
+        },
+      ],
     };
   }
 }
