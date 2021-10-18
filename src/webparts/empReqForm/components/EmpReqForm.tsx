@@ -25,10 +25,13 @@ import {
   MessageBarType,
   BaseButton,
   Button,
+  addYears,
+  addDays,
 } from "@fluentui/react";
 
 import CommOff from "./CompOff";
 import ErrorMessage from "./ErrorMessage";
+import PendingItemsList from "./PendingItemsList";
 
 import { MSGraphClient } from "@microsoft/sp-http";
 import * as MicrosoftGraph from "@microsoft/microsoft-graph-types";
@@ -38,6 +41,10 @@ import { IItemAddResult } from "@pnp/sp/items";
 
 import "@pnp/sp/lists";
 import "@pnp/sp/items";
+
+import { graph } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/photos";
 
 // specify css which comes with bootstrap and fontawesome
 // faced problems using require and giving absolute path of css files
@@ -55,7 +62,7 @@ const imageProps: Partial<IImageProps> = {
   imageFit: ImageFit.centerContain,
   width: 150,
   height: 150,
-  src: "http://via.placeholder.com/250x150",
+  src: "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_640.png/250x150",
   // Show a border around the image (just for demonstration purposes)
   styles: (props) => ({
     root: { border: "1px solid " + props.theme.palette.neutralSecondary },
@@ -85,9 +92,21 @@ export interface BalLeftBlueprintObj {
   EL: any;
   Comp_Off: any;
   Leave_Without_pay: any;
-  ML: any;
-  PL: any;
+  // ML: any;
+  // PL: any;
+  PH: any;
   Total: any;
+}
+
+export interface PendingLeaves {
+  Leave_Type: any;
+  No_Of_Days: any;
+  Leave_From: any;
+  Leave_To: any;
+  Return_On: any;
+  Purpose: any;
+  Status: any;
+  Pending_Id: any;
 }
 
 export default class EmpReqForm extends React.Component<
@@ -125,12 +144,27 @@ export default class EmpReqForm extends React.Component<
     showIncomplete: any;
     No_Of_Days: any;
     greedy: any;
+
+    minStartDate: any;
+    maxEndDate: any;
+    Max_Consecutive_Days: any;
+    imageUrl: any;
+    pendingLeaves: PendingLeaves[];
+
+    commOffDropdownOptions: any;
+    commOffObj: any;
   }
 > {
-  w = Web(this.props.webUrl + "/sites/Maitri");
+  // required in production
+  w = Web(this.props.webUrl);
+
+  // required in local
+  // w = Web(this.props.webUrl + "/sites/Maitri");
+
   url = location.search;
   params = new URLSearchParams(this.url);
   id = this.params.get("spid");
+  today = new Date(Date.now());
 
   // dummy function to kickstart jquery
   private GetIPAddress(): void {
@@ -151,19 +185,32 @@ export default class EmpReqForm extends React.Component<
     }).responseJSON;
   }
 
+  private GetSundayCountBetweenDates = (startDate, endDate) => {
+    let totalWeekends = 0;
+    for (let i = startDate; i <= endDate; i.setDate(i.getDate() + 1)) {
+      if (i.getDay() == 0 || i.getDay() == 1) totalWeekends++;
+    }
+    return totalWeekends;
+  };
+
   private _temp: BalLeftBlueprintObj = {
     CL: 0,
     SL: 0,
     EL: 0,
     Comp_Off: 0,
     Leave_Without_pay: 0,
-    ML: 0,
-    PL: 0,
+    // ML: 0,
+    // PL: 0,
+    PH: 0,
     Total: 0,
   };
 
+  private _pendingLeavesTemp: PendingLeaves[];
+
   constructor(props: IEmpReqFormProps, state: any) {
     super(props);
+
+    this._pendingLeavesTemp = [];
     this.state = {
       selectedItem: "cl",
       commOff: true,
@@ -195,17 +242,30 @@ export default class EmpReqForm extends React.Component<
       showIncomplete: false,
       No_Of_Days: 0,
       greedy: false,
+
+      minStartDate: undefined,
+      maxEndDate: undefined,
+      Max_Consecutive_Days: undefined,
+      imageUrl:
+        "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_640.png/250x150",
+      pendingLeaves: this._pendingLeavesTemp,
+      commOffDropdownOptions: [],
+      commOffObj: undefined,
     };
   }
 
   public handleDropdownChange = (
     event: React.FormEvent<HTMLDivElement>,
-    item: IDropdownOption
+    item: any
   ): void => {
     this.setState(
       {
         selectedItem: item.key,
         leaveType: item.text,
+        leaveStartDate: undefined,
+        leaveEndDate: undefined,
+        No_Of_Days: undefined,
+        Max_Consecutive_Days: item.Max_Consecutive_Days,
       },
       () => {
         console.log(
@@ -214,6 +274,42 @@ export default class EmpReqForm extends React.Component<
           " ",
           this.state.leaveType
         );
+        let minDate = addDays(this.today, item.Apply_Before_Days);
+        if (minDate.getDay() === 0) minDate = addDays(minDate, 1);
+        const tempDate = minDate;
+
+        // the problem is with getSundayCountFunction
+
+        // console.log(
+        //   "Max_Consecutive_Days: ",
+        //   item.Max_Consecutive_Days,
+        //   " ",
+        //   maxDate
+        // );
+        // implementing Apply_Before_Days
+        if (
+          this.state.selectedItem === "3 CL" ||
+          this.state.selectedItem === "5 EL" ||
+          this.state.selectedItem === "8 ML" ||
+          this.state.selectedItem === "9 PL"
+        ) {
+          console.log(
+            "CL selected",
+            minDate,
+            "\nApply_Before_Days: ",
+            item.Apply_Before_Days
+          );
+          this.setState({ minStartDate: minDate });
+        } else if (this.state.selectedItem === "4 SL") {
+          minDate = addDays(this.today, -item.Max_Post_Request_Days);
+          console.log(this.today, item.Max_Post_Request_Days);
+
+          this.setState({ minStartDate: minDate });
+        } else if (this.state.selectedItem === "7 Leave_Without_Pay") {
+          this.setState({ minStartDate: this.today });
+        } else {
+          this.setState({ minStartDate: undefined });
+        }
       }
     );
     // if (this.state.selectedItem == "grape") {
@@ -236,6 +332,7 @@ export default class EmpReqForm extends React.Component<
     this.setState(
       {
         leaveStartDate: date,
+        leaveEndDate: undefined,
       },
       () => {
         if (this.state.leaveEndDate != undefined) {
@@ -247,6 +344,38 @@ export default class EmpReqForm extends React.Component<
             No_Of_Days: dayDiff,
           });
         }
+
+        // implementing Max_Consecutive_Days
+        let maxDate = addDays(
+          this.state.leaveStartDate,
+          this.state.Max_Consecutive_Days - 1
+        );
+        // CL and EL could be taken in chunks with min days as 1
+        if (
+          this.state.selectedItem === "3 CL" ||
+          this.state.selectedItem === "5 EL"
+        ) {
+          this.setState({ maxEndDate: maxDate });
+        } else if (this.state.selectedItem === "4 SL") {
+          maxDate = addDays(
+            this.state.leaveStartDate,
+            this.state.balLeavesObj.SL - 1
+          );
+          this.setState({ maxEndDate: maxDate });
+        } else if (this.state.selectedItem === "6 Comp_Off") {
+          this.setState({ maxEndDate: this.state.leaveStartDate });
+          this.handleEndDateChange(this.state.leaveStartDate);
+        } else if (
+          // ML and PL would have to take all in a bunch
+          this.state.selectedItem === "8 ML" ||
+          this.state.selectedItem === "9 PL"
+        ) {
+          this.setState({ leaveEndDate: maxDate, maxEndDate: maxDate }, () => {
+            this.handleEndDateChange(maxDate);
+          });
+        } else {
+          this.setState({ maxEndDate: undefined });
+        }
       }
     );
   };
@@ -255,6 +384,7 @@ export default class EmpReqForm extends React.Component<
     this.setState(
       {
         leaveEndDate: date,
+        returnDate: undefined,
       },
       () => {
         if (this.state.leaveStartDate != undefined) {
@@ -335,6 +465,16 @@ export default class EmpReqForm extends React.Component<
     this.setState({ greedy: false });
   };
 
+  private handleCommOffDropdown = (
+    event: React.FormEvent<HTMLDivElement>,
+    option: IDropdownOption,
+    index?: number
+  ) => {
+    this.setState({ commOffObj: option }, () => {
+      console.log(this.state.commOffObj);
+    });
+  };
+
   public render(): React.ReactElement<IEmpReqFormProps> {
     return (
       <div id="container">
@@ -358,6 +498,11 @@ export default class EmpReqForm extends React.Component<
                 <li>
                   <a data-toggle="tab" href="#history">
                     Leave Summary
+                  </a>
+                </li>
+                <li>
+                  <a data-toggle="tab" href="#cancel">
+                    Cancel Leaves
                   </a>
                 </li>
               </ul>
@@ -433,7 +578,7 @@ export default class EmpReqForm extends React.Component<
                           </div>
                         </div>
                       </div>
-
+                      {/* 
                       <div className="row top-buffer">
                         <div className="col-lg-6">
                           <div className="form-group">
@@ -442,6 +587,7 @@ export default class EmpReqForm extends React.Component<
                           </div>
                         </div>
                       </div>
+                     */}
                     </div>
                   </div>
                 </div>
@@ -492,6 +638,12 @@ export default class EmpReqForm extends React.Component<
                               value={this.state.leaveStartDate}
                               onSelectDate={this.handleStartDateChange}
                               isRequired
+                              minDate={this.state.minStartDate}
+                              maxDate={
+                                this.state.selectedItem === "4 SL"
+                                  ? this.today
+                                  : undefined
+                              }
                             />
                           </div>
                         </div>
@@ -508,6 +660,15 @@ export default class EmpReqForm extends React.Component<
                               value={this.state.leaveEndDate}
                               onSelectDate={this.handleEndDateChange}
                               isRequired
+                              minDate={this.state.leaveStartDate}
+                              maxDate={this.state.maxEndDate}
+                              disabled={
+                                this.state.selectedItem === "8 ML" ||
+                                this.state.selectedItem === "9 PL" ||
+                                this.state.leaveStartDate === undefined
+                                  ? true
+                                  : false
+                              }
                             />
                           </div>
                         </div>
@@ -524,6 +685,7 @@ export default class EmpReqForm extends React.Component<
                               value={this.state.returnDate}
                               onSelectDate={this.handleReturnDateChange}
                               isRequired
+                              minDate={this.state.leaveEndDate}
                             />
                           </div>
                         </div>
@@ -560,10 +722,19 @@ export default class EmpReqForm extends React.Component<
 
                       {/* Comm. Off render component */}
                       {this.state.selectedItem == "6 Comp_Off" ? (
-                        <CommOff
-                          onSelectCommOff1={this.handleCommOffOccasion}
-                          onSelectCommOff2={this.handleCommOffDate}
-                        />
+                        <div className="row top-buffer">
+                          <div className="col-lg-12">
+                            <div className="form-group">
+                              <Dropdown
+                                placeholder="Select an option"
+                                label="Select from Granted Comm Offs"
+                                options={this.state.commOffDropdownOptions}
+                                // styles={dropdownStyles}
+                                onChange={this.handleCommOffDropdown}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       ) : null}
 
                       {/* Emergency contact no */}
@@ -597,7 +768,7 @@ export default class EmpReqForm extends React.Component<
                       </div>
 
                       {/* Document Upload */}
-                      <div className="row top-buffer">
+                      {/* <div className="row top-buffer">
                         <div className="col-lg-12">
                           <div className="form-group">
                             <br />
@@ -613,7 +784,7 @@ export default class EmpReqForm extends React.Component<
                             />
                           </div>
                         </div>
-                      </div>
+                      </div> */}
 
                       {/* Submit button */}
                       <div className="row top-buffer">
@@ -639,7 +810,8 @@ export default class EmpReqForm extends React.Component<
                               isMultiline={false}
                               onDismiss={this.handleGreedyMsg}
                             >
-                              Getting a bit greedy? Eh buddy?!
+                              Requested leave type balance is less than
+                              required.
                             </MessageBar>
                           ) : null}
                         </div>
@@ -683,18 +855,8 @@ export default class EmpReqForm extends React.Component<
                                   <td>{this.state.balLeavesObj.Comp_Off}</td>
                                 </tr>
                                 <tr>
-                                  <th scope="row">Leave Without Pay</th>
-                                  <td>
-                                    {this.state.balLeavesObj.Leave_Without_pay}
-                                  </td>
-                                </tr>
-                                <tr>
-                                  <th scope="row">ML</th>
-                                  <td>{this.state.balLeavesObj.ML}</td>
-                                </tr>
-                                <tr>
-                                  <th scope="row">PL</th>
-                                  <td>{this.state.balLeavesObj.PL}</td>
+                                  <th scope="row">PH</th>
+                                  <td>{this.state.balLeavesObj.PH}</td>
                                 </tr>
                                 <tr className="table-primary">
                                   <th scope="row">Total</th>
@@ -702,6 +864,41 @@ export default class EmpReqForm extends React.Component<
                                     {this.state.balLeavesObj.Total}
                                   </td>
                                 </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cancel Leaves */}
+                <div
+                  id="cancel"
+                  className="tab-pane fade in ui-tabs-panel ui-widget-content ui-corner-bottom"
+                >
+                  <div className="panel panel-default">
+                    <div className="panel-body">
+                      <div className="row top-buffer">
+                        <div className="col-lg-12">
+                          <div className="form-group">
+                            <table className="table table-borderless table-hover">
+                              <thead>
+                                <tr>
+                                  <th scope="col">Leave Type</th>
+                                  <th scope="col">Leave From</th>
+                                  <th scope="col">Leave To</th>
+                                  <th scope="col">Number of Days</th>
+                                  <th scope="col">Return On</th>
+                                  <th scope="col">Purpose</th>
+                                  <th scope="col">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {this.state.pendingLeaves.map((item) => (
+                                  <PendingItemsList item={item} w={this.w} />
+                                ))}
                               </tbody>
                             </table>
                           </div>
@@ -719,15 +916,66 @@ export default class EmpReqForm extends React.Component<
   }
 
   public componentDidMount() {
-    this.GetIPAddress();
     this.getEmpData();
     this.getDropdownOptions();
   }
 
+  private getPendingRequests = () => {
+    // get all the pending leave req for the logged in user
+    // get all the items from a list
+
+    let _leaveTypeFull: any;
+    this.w.lists
+      .getByTitle("Leave_Requests")
+      .items.get()
+      .then((items: any[]) => {
+        items.map((el) => {
+          if (this.state.empId === el.Employee_ID && el.Status === "Pending") {
+            // get a specific item by id
+            this.w.lists
+              .getByTitle("Leave_Types")
+              .items.getById(el.Leave_TypeId)
+              .get()
+              .then((item: any) => {
+                // console.log("Leave type Item is ", item.Leave_Type_Full);
+                _leaveTypeFull = item.Leave_Type_Full;
+              })
+              .then(() => {
+                this.setState({
+                  pendingLeaves: [
+                    ...this.state.pendingLeaves,
+                    {
+                      Leave_Type: _leaveTypeFull,
+                      Leave_From: el.Leave_From,
+                      Leave_To: el.Leave_To,
+                      Return_On: el.Return_On,
+                      Purpose: el.Purpose,
+                      Status: el.Status,
+                      Pending_Id: el.Id,
+                      No_Of_Days: el.No_of_days,
+                    },
+                  ],
+                });
+              })
+              .then(() => {
+                console.log(this.state.pendingLeaves);
+              })
+              .then(() => {
+                console.log("Now everything is done!");
+              });
+          }
+        });
+      });
+  };
+
   // Pass logged in user's emailID to this function to get his userID
   // which will be pushed to the EmployeeId list col
   private GetUserId(userName) {
-    var siteUrl = this.props.webUrl + "/sites/Maitri";
+    // required in production
+    var siteUrl = this.props.webUrl;
+
+    // required in local
+    // var siteUrl = this.props.webUrl + "/sites/Maitri";
 
     // console.log("siteUrl", siteUrl);
 
@@ -760,7 +1008,7 @@ export default class EmpReqForm extends React.Component<
     return call;
   }
 
-  private getEmpData = (): void => {
+  private getEmpData = async (): Promise<void> => {
     // Makes a graph api call to fetch logged in user's data from Azure AD
 
     // preventDefault();
@@ -799,6 +1047,12 @@ export default class EmpReqForm extends React.Component<
           .then(() => {
             this.getBalLeaveData();
           })
+          .then(() => {
+            this.getPendingRequests();
+          })
+          .then(() => {
+            this.getCommOffData();
+          })
           .catch((err) => {
             console.log("🔥 There was an error 🧯 ", err);
           });
@@ -835,6 +1089,74 @@ export default class EmpReqForm extends React.Component<
             console.log("🔥 There was an error 🧯 ", err);
           });
       });
+
+    // this.props.context.msGraphClientFactory
+    //   .getClient()
+    //   .then((client: MSGraphClient) => {
+    //     client
+    //       .api("/me/photo/$value")
+    //       .responseType("blob")
+    //       .get()
+    //       .then((img) => {
+    //         const xrl = window.URL || window.webkitURL;
+    //         const blobUrl = xrl.createObjectURL(img);
+    //         console.log("result for calling the photo ", blobUrl);
+    //         // console.log("inside then: \n");
+
+    //         // console.log(img.dat);
+    //       })
+    //       .catch((err) => {
+    //         console.log("The error message is: \n", err);
+    //       });
+    //   });
+
+    // const currentUser = await graph.me.photo();
+    // console.log(currentUser);
+  };
+
+  private getCommOffData = () => {
+    console.log("Fetching the comm off data");
+    // get all the items from a list
+    this.w.lists
+      .getByTitle("CommOff_Master")
+      .items.get()
+      .then((items: any[]) => {
+        let i = 1;
+        items.map((el) => {
+          if (
+            el.EmployeeID === this.state.empId &&
+            el.Status === "Not-Availed"
+          ) {
+            const dt = new Date(el.Grant_Against_Date);
+            const date = this.getDate(dt);
+            this.setState({
+              commOffDropdownOptions: [
+                ...this.state.commOffDropdownOptions,
+                {
+                  key: el.ID,
+                  text: i + ".    " + date + "    " + el.Occasion,
+                  date: new Date(date),
+                  occasion: el.Occasion,
+                },
+              ],
+            });
+            console.log(date, " ", el.Occasion);
+            console.log(el);
+            i++;
+          }
+        });
+      });
+  };
+
+  private getDate = (dt) => {
+    const date =
+      dt.getFullYear() +
+      "-" +
+      ("" + (dt.getMonth() + 1)).slice(-2) +
+      "-" +
+      ("0" + dt.getDate()).slice(-2);
+
+    return date;
   };
 
   private postItem = (): void => {
@@ -847,21 +1169,25 @@ export default class EmpReqForm extends React.Component<
       .items.add({
         Employee_Name: this.state.empName,
         Employee_ID: this.state.empId,
+        Employee_Email: this.state.empEmail,
         Leave_TypeId: leaveTypeArr[0],
         Leave_From: this.state.leaveStartDate,
         Leave_To: this.state.leaveEndDate,
+        No_of_days: this.state.No_Of_Days,
         Return_On: this.state.returnDate,
         Purpose: this.state.leavePurpose,
         Emergency_Contact: this.state.emergencyContact,
         Address: this.state.emergencyAddress,
         EmployeeId: this.state.employee,
         Assigned_To_PersonId: this.state.assigned_to_person,
-        Compoff_against_date: this.state.commDate,
-        Compoff_occasion: this.state.commOccasion,
+        Compoff_against_date: this.state.commOffObj.date,
+        Compoff_occasion:
+          this.state.commOffObj.key + "$" + this.state.commOffObj.occasion,
       })
       .then((iar: IItemAddResult) => {
         console.log(iar);
         alert("New list item created Succesfully 😃");
+        window.location.reload();
       })
       .catch((err) => {
         console.log("There was an error 🔥", err);
@@ -875,23 +1201,28 @@ export default class EmpReqForm extends React.Component<
       .items.get()
       .then((items: any[]) => {
         items.map((el) => {
-          this.setState(
-            {
-              leaveTypesDropdownOptions: [
-                ...this.state.leaveTypesDropdownOptions,
-                {
-                  key: el.Id + " " + el.Title,
-                  text: String(el.Leave_Type_Full),
-                },
-              ],
-            },
-            () => {
-              console.log(
-                "Inside arr setState: \n",
-                this.state.leaveTypesDropdownOptions
-              );
-            }
-          );
+          if (el.Title != "ML" && el.Title != "PL") {
+            this.setState(
+              {
+                leaveTypesDropdownOptions: [
+                  ...this.state.leaveTypesDropdownOptions,
+                  {
+                    key: el.Id + " " + el.Title,
+                    text: String(el.Leave_Type_Full),
+                    Apply_Before_Days: el.Apply_Before_Days,
+                    Max_Consecutive_Days: el.Max_Consecutive_Days,
+                    Max_Post_Request_Days: el.Max_Post_Request_Days,
+                  },
+                ],
+              },
+              () => {
+                // console.log(
+                //   "Inside arr setState: \n",
+                //   this.state.leaveTypesDropdownOptions
+                // );
+              }
+            );
+          }
           // console.log("el map: ", el.Title);
         });
       });
@@ -909,7 +1240,7 @@ export default class EmpReqForm extends React.Component<
       .getByTitle("Leave_Master")
       .items.get()
       .then((items: any[]) => {
-        console.log(items);
+        // console.log(items);
         for (let i = 0; i < items.length; i++) {
           if (items[i].Employee_ID == this.state.empId) {
             const temp: BalLeftBlueprintObj = {
@@ -918,24 +1249,21 @@ export default class EmpReqForm extends React.Component<
               EL: items[i].EL,
               Comp_Off: items[i].Comp_Off,
               Leave_Without_pay: items[i].Leave_Without_Pay,
-              ML: items[i].ML,
-              PL: items[i].PL,
+              PH: items[i].PH,
               Total:
                 items[i].CL +
                 items[i].SL +
                 items[i].EL +
                 items[i].Comp_Off +
-                items[i].Leave_Without_Pay +
-                items[i].ML +
-                items[i].PL,
+                items[i].PH,
             };
             this.setState({ balLeavesObj: temp }, () => {
-              console.log(
-                "Found! ",
-                items[i].Employee_ID,
-                " ",
-                this.state.balLeavesObj
-              );
+              // console.log(
+              //   "Found! ",
+              //   items[i].Employee_ID,
+              //   " ",
+              //   this.state.balLeavesObj
+              // );
             });
             break;
           }
@@ -957,8 +1285,7 @@ export default class EmpReqForm extends React.Component<
     else {
       if (
         this.state.selectedItem === "6 Comp_Off" &&
-        (this.state.commDate === undefined ||
-          this.state.commOccasion === undefined)
+        this.state.commOffObj === undefined
       )
         this.setState({ showIncomplete: true });
       else {
@@ -971,7 +1298,7 @@ export default class EmpReqForm extends React.Component<
         // );
         if (this.state.No_Of_Days > this.state.balLeavesObj[val]) {
           this.setState({ greedy: true });
-          console.log("Expecting more? Eh buddy?!");
+          console.log("Leave bal is less");
         } else {
           this.setState({ showIncomplete: false, greedy: false }, () => {
             this.postItem();
