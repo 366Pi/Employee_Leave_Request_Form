@@ -37,6 +37,7 @@ import { MSGraphClient } from "@microsoft/sp-http";
 import * as MicrosoftGraph from "@microsoft/microsoft-graph-types";
 import { Web } from "@pnp/sp/webs";
 import { sp } from "@pnp/sp";
+import pnp from "sp-pnp-js";
 import { IItemAddResult } from "@pnp/sp/items";
 
 import "@pnp/sp/lists";
@@ -45,6 +46,7 @@ import "@pnp/sp/items";
 import { graph } from "@pnp/graph";
 import "@pnp/graph/users";
 import "@pnp/graph/photos";
+import { result } from "lodash";
 
 // specify css which comes with bootstrap and fontawesome
 // faced problems using require and giving absolute path of css files
@@ -156,10 +158,10 @@ export default class EmpReqForm extends React.Component<
   }
 > {
   // required in production
-  w = Web(this.props.webUrl);
+  // w = Web(this.props.webUrl);
 
   // required in local
-  // w = Web(this.props.webUrl + "/sites/Maitri");
+  w = Web(this.props.webUrl + "/sites/Maitri");
 
   url = location.search;
   params = new URLSearchParams(this.url);
@@ -269,9 +271,10 @@ export default class EmpReqForm extends React.Component<
       },
       () => {
         console.log(
-          "Inside Dropdown: ",
+          "Inside Dropdown:\n",
+          "selectedItem: ",
           this.state.selectedItem,
-          " ",
+          " | ",
           this.state.leaveType
         );
         let minDate = addDays(this.today, item.Apply_Before_Days);
@@ -918,6 +921,7 @@ export default class EmpReqForm extends React.Component<
   public componentDidMount() {
     this.getEmpData();
     this.getDropdownOptions();
+    this._getUserID();
   }
 
   private getPendingRequests = () => {
@@ -958,24 +962,32 @@ export default class EmpReqForm extends React.Component<
                 });
               })
               .then(() => {
-                console.log(this.state.pendingLeaves);
+                // console.log(this.state.pendingLeaves);
               })
               .then(() => {
-                console.log("Now everything is done!");
+                // console.log("Now everything is done!");
               });
           }
         });
       });
   };
 
+  // trail function
+  private _getUserID = async () => {
+    let val = await pnp.sp.profiles.getPropertiesFor(
+      "i:0#.f|membership|rkg275@gmail.com"
+    );
+    console.log(JSON.stringify(val));
+  };
+
   // Pass logged in user's emailID to this function to get his userID
   // which will be pushed to the EmployeeId list col
   private GetUserId(userName) {
     // required in production
-    var siteUrl = this.props.webUrl;
+    // var siteUrl = this.props.webUrl;
 
     // required in local
-    // var siteUrl = this.props.webUrl + "/sites/Maitri";
+    var siteUrl = this.props.webUrl + "/sites/Maitri";
 
     // console.log("siteUrl", siteUrl);
 
@@ -1020,13 +1032,13 @@ export default class EmpReqForm extends React.Component<
         client
           .api("/me")
           .select(
-            "displayName,department,mail,mobilePhone,manager,jobTitle,employeeId"
+            "displayName,department,mail,mobilePhone,manager,jobTitle,employeeId,id"
           )
           .get()
           .then((res) => {
-            // console.log(
-            //   `${res.displayName}, ${res.department}, ${res.mail}, ${res.mobilePhone}, ${res.employeeId}`
-            // );
+            console.log(
+              `${res.displayName}, ${res.department}, ${res.mail}, ${res.mobilePhone}, ${res.employeeId}`
+            );
             this.setState(
               {
                 empName: res.displayName,
@@ -1036,11 +1048,15 @@ export default class EmpReqForm extends React.Component<
                 empEmail: res.mail,
                 empMobileNo: res.mobilePhone,
               },
-              () => {
-                const obj = this.GetUserId(this.state.empEmail);
-                this.setState({ employee: obj.d.Id }, () => {
-                  console.log("EmployeeId: ", this.state.employee);
-                });
+              async () => {
+                const _Id = this.GetUserId(this.state.empEmail);
+                console.log(
+                  "emp email: ",
+                  this.state.empEmail,
+                  " emp's ppl-picker Id: ",
+                  _Id
+                );
+                // this.setState({ employee: _Id });
               }
             );
           })
@@ -1054,10 +1070,11 @@ export default class EmpReqForm extends React.Component<
             this.getCommOffData();
           })
           .catch((err) => {
-            console.log("🔥 There was an error 🧯 ", err);
+            console.log("🔥 There was an error 🧯 ", err.message);
           });
       });
 
+    // setting the manager for employee
     this.props.context.msGraphClientFactory
       .getClient()
       .then((client: MSGraphClient) => {
@@ -1072,16 +1089,22 @@ export default class EmpReqForm extends React.Component<
                 manager: res.displayName,
                 managerEmail: res.mail,
               },
-              () => {
-                const obj = this.GetUserId(this.state.managerEmail);
-                this.setState({ assigned_to_person: obj.d.Id }, () => {
-                  // console.log(
-                  //   "email: ",
-                  //   this.state.managerEmail,
-                  //   " Id: ",
-                  //   this.state.assigned_to_person
-                  // );
-                });
+              async () => {
+                const _Id = this.GetUserId(this.state.managerEmail);
+                console.log(
+                  "manager email: ",
+                  this.state.managerEmail,
+                  " manager ppl-picker Id: ",
+                  _Id
+                );
+                // this.setState({ assigned_to_person: _Id }, () => {
+                //   console.log(
+                //     "manager email: ",
+                //     this.state.managerEmail,
+                //     " manager's ppl-picker Id: ",
+                //     this.state.assigned_to_person
+                //   );
+                // });
               }
             );
           })
@@ -1141,7 +1164,7 @@ export default class EmpReqForm extends React.Component<
               ],
             });
             console.log(date, " ", el.Occasion);
-            console.log(el);
+            // console.log(el);
             i++;
           }
         });
@@ -1180,9 +1203,14 @@ export default class EmpReqForm extends React.Component<
         Address: this.state.emergencyAddress,
         EmployeeId: this.state.employee,
         Assigned_To_PersonId: this.state.assigned_to_person,
-        Compoff_against_date: this.state.commOffObj.date,
+        Compoff_against_date:
+          this.state.selectedItem === "6 Comp_Off"
+            ? this.state.commOffObj.date
+            : null,
         Compoff_occasion:
-          this.state.commOffObj.key + "$" + this.state.commOffObj.occasion,
+          this.state.selectedItem === "6 Comp_Off"
+            ? this.state.commOffObj.key + "$" + this.state.commOffObj.occasion
+            : null,
       })
       .then((iar: IItemAddResult) => {
         console.log(iar);
